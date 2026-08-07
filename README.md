@@ -1,7 +1,15 @@
 # ⚖️ Terms
-## AI-Powered Legal Document & Terms Analyzer
 
-> **Understand legal documents before you sign or click "Accept".**
+<p align="center">
+  <img src="docs/Logo/logo.png" alt="Terms Logo" width="220">
+</p>
+
+<h3 align="center">AI-Powered Legal Document & Terms Analyzer</h3>
+
+<p align="center">
+Understand legal documents before you sign or click <b>"Accept"</b>.
+</p>
+
 
 Terms is an AI-powered legal document analysis platform that leverages **Natural Language Processing (NLP)**, **Transformer Models**, **Retrieval-Augmented Generation (RAG)**, and **Large Language Models (LLMs)** to help users understand complex legal documents quickly and accurately.
 
