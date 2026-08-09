@@ -464,7 +464,7 @@ form{display:flex; flex-direction:column; gap:1.1rem;}
     }
 
     // Point this at wherever `uvicorn main:app` is running.
-    const API_BASE = 'http://13.60.191.67:8000';
+    const API_BASE = 'http://localhost:8000';
 
     function saveSession(data){
       localStorage.setItem('authToken', data.token);

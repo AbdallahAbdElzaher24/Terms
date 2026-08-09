@@ -121,7 +121,7 @@ svg{display:block;}
 .history-list{flex:1; overflow-y:auto; padding:.6rem;}
 .history-group-label{font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); padding:.8rem .6rem .35rem;}
 .history-item{
-  display:flex; flex-direction:column; gap:.2rem; padding:.65rem .7rem; border-radius:10px; cursor:pointer;
+  display:flex; flex-direction:column; gap:.2rem; padding:.65rem 2.2rem .65rem .7rem; border-radius:10px; cursor:pointer;
   border:1px solid transparent; transition:all .15s ease; position:relative;
 }
 .history-item:hover{background:var(--surface-2);}
@@ -131,6 +131,16 @@ svg{display:block;}
 }
 .history-title{font-size:.85rem; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .history-preview{font-size:.75rem; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.history-delete-btn{
+  display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:8px;
+  position:absolute; inset-inline-end:.5rem; top:50%; transform:translateY(-50%);
+  background:transparent; border:1px solid transparent; color:var(--text-faint);
+  opacity:0; transition:all .15s ease;
+}
+.history-item:hover .history-delete-btn{opacity:1;}
+.history-delete-btn:hover{background:var(--danger); border-color:var(--danger); color:#fff;}
+.history-delete-btn svg{width:14px; height:14px; pointer-events:none;}
+@media (hover:none){ .history-delete-btn{opacity:1;} }
 .history-time{font-size:.68rem; color:var(--text-faint); position:absolute; inset-inline-end:.7rem; top:.65rem;}
 
 .sidebar-foot{padding:.9rem; border-top:1px solid var(--border); display:flex; align-items:center; gap:.6rem;}
@@ -568,7 +578,7 @@ main{flex:1; overflow-y:auto; position:relative; z-index:1;}
     }
 
     /* ============ backend wiring ============ */
-    const API_BASE = 'http://13.60.191.67:8000';
+    const API_BASE = 'http://localhost:8000';
     const authToken = localStorage.getItem('authToken');
     if(!authToken){
       window.location.href = 'index.html';
@@ -623,8 +633,15 @@ main{flex:1; overflow-y:auto; position:relative; z-index:1;}
           item.className = 'history-item' + (c.id === activeConversationId ? ' active' : '');
           item.innerHTML = `
             <span class="history-title">${escapeHtml(c.title)}</span>
-            <span class="history-preview">${escapeHtml(c.preview)}</span>`;
+            <span class="history-preview">${escapeHtml(c.preview)}</span>
+            <button class="history-delete-btn" type="button" title="Delete conversation" aria-label="Delete conversation">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M4 6h12M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6m-6.5 0 .6 9.4A1.5 1.5 0 0 0 7.6 17h4.8a1.5 1.5 0 0 0 1.5-1.6L14.5 6M8.5 9.5v4M11.5 9.5v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>`;
           item.addEventListener('click', () => loadConversation(c.id));
+          item.querySelector('.history-delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteConversation(c.id, c.title);
+          });
           historyList.appendChild(item);
         });
       });
@@ -679,6 +696,30 @@ main{flex:1; overflow-y:auto; position:relative; z-index:1;}
         if(window.innerWidth <= 900) closeSidebar();
       }catch(err){
         showToast("Couldn't load that conversation", true);
+      }
+    }
+
+    async function deleteConversation(id, title){
+      if(!confirm(`Delete "${title}"? This can't be undone.`)) return;
+      try{
+        const res = await fetch(API_BASE + '/api/chats/' + id, { method: 'DELETE', headers: authHeaders() });
+        if(!res.ok) throw new Error('Delete failed');
+        conversations = conversations.filter(c => c.id !== id);
+        // If the chat being viewed right now was the one deleted, clear the
+        // thread and drop back to the empty state instead of leaving stale
+        // messages on screen for a conversation that no longer exists.
+        if(activeConversationId === id){
+          stopGenerating();
+          activeConversationId = null;
+          activeDocumentId = null;
+          setActiveDocChip(null);
+          thread.innerHTML = '';
+          thread.appendChild(emptyState);
+        }
+        renderHistory(historySearch.value);
+        showToast(`Deleted "${title}"`);
+      }catch(err){
+        showToast("Couldn't delete that conversation", true);
       }
     }
 

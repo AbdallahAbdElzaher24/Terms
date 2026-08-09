@@ -3,6 +3,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -243,6 +244,26 @@ def delete_chat(chat_id: str, user=Depends(get_current_user)):
 
 _background_tasks: set[asyncio.Task] = set()
 
+_ATTACHMENT_NOTE_RE = re.compile(
+    r"\[Attached (?:image|audio|contract): (.+?) — processed into \d+ chunk\(s\)[^\]]*\]"
+)
+_PIPELINE_NOTE_RE = re.compile(r"\[Note:.*?\]")
+
+
+def _derive_title_seed(message: str) -> str:
+    """Best-effort short seed for naming a new chat. Prefers whatever text
+    the user actually typed; if they only attached a file with no message
+    (or the typed text is blank), falls back to that file's name instead of
+    leaving the raw "[Attached ...]" bracket note as the title."""
+    text_only = _PIPELINE_NOTE_RE.sub("", _ATTACHMENT_NOTE_RE.sub("", message)).strip()
+    if text_only:
+        return text_only
+    match = _ATTACHMENT_NOTE_RE.search(message)
+    if match:
+        filename = match.group(1).strip()
+        return filename.rsplit(".", 1)[0] or filename
+    return "New conversation"
+
 
 async def _name_new_chat(chat_id: str, first_message: str) -> None:
     """Names a brand-new chat exactly once, from its very first message, with
@@ -310,7 +331,10 @@ async def chat(body: ChatBody, user=Depends(get_current_user)):
         elif not body.temporary:
             is_new_chat = True
             chat_id = new_id()
-            title = body.message.strip()[:60] or "New conversation"
+            # Placeholder shown until the background LLM title lands. Uses
+            # the same seed-derivation as below so an attachment-only send
+            # gets the filename instead of the raw bracket note.
+            title = _derive_title_seed(body.message)[:60] or "New conversation"
             conn.execute(
                 "INSERT INTO chats (id, user_id, title, created_at, updated_at) VALUES (?,?,?,?,?)",
                 (chat_id, user["id"], title, now(), now()),
@@ -322,9 +346,10 @@ async def chat(body: ChatBody, user=Depends(get_current_user)):
             )
 
     if is_new_chat:
-        # The frontend appends an "[Attached ...]" note to the message —
-        # strip it so the title comes from what the user actually asked.
-        title_source = body.message.split("\n[Attached")[0].strip() or body.message
+        # Same seed used for the placeholder title above — for an
+        # attachment-only send this is the filename, not the raw note, so
+        # the LLM has something sensible to build a title from.
+        title_source = _derive_title_seed(body.message)
         task = asyncio.create_task(_name_new_chat(chat_id, title_source))
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)
